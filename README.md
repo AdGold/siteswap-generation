@@ -16,7 +16,7 @@ All programs can be compiled simply using `make`.
 
 ### Counting programs
 * `count_prime <period> [-c] [-v] [-p]` Prints out a count of the prime (or composite if given -c) siteswaps fed into it, optionally print out the siteswaps themselves too using -p and a running count using -v.
-* `gen_comp <balls> <period> [-f] [-z] [-v] [-p]` Prints out a count (and the actual patterns using -p) of composite patterns for a given balls/period (only those from an infinite state if not given -f), optionally only those with 0 (-z) and a running count using -v. This is much faster than generating all of them and using count_prime to limit.
+* `gen_comp <balls> <period> [-f] [-i] [-z] [-v] [-p]` Prints out a count (and the actual patterns using -p) of composite patterns for a given balls/period (-i to include ones from infinite states, -f to include ones from finite states), optionally only those with 0 (-z) and a running count using -v. This is much faster than generating all of them and using count_prime to limit.
 
 ## Examples
 
@@ -46,9 +46,9 @@ Looked at: 0, count: 0
 Looked at: 1048576, count: 14327
 Looked at: 2097152, count: 28598
 38228
-$ ./gen_comp 10 10 -z # count the number of 10 ball period 10 patterns which are composite through an *infinite* state and contain a zero.
+$ ./gen_comp 10 10 -zi # count the number of 10 ball period 10 patterns which are composite through an *infinite* state and contain a zero.
 823887
-$ ./gen_comp 10 10 -zf # count the number of composite 10 ball period 10 patterns with zeros, separating the counts of finite and infinite states.
+$ ./gen_comp 10 10 -zif # count the number of composite 10 ball period 10 patterns with zeros, separating the counts of finite and infinite states.
 840447
 823887
 16560

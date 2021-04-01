@@ -13,6 +13,7 @@
 
 #define MAX_PERIOD 25
 #define MAX_HEIGHT 300
+#define INVALID -1
 
 using StateRep = std::bitset<MAX_HEIGHT>;
 struct State {
@@ -20,9 +21,18 @@ struct State {
     int length = 0;
 };
 
+std::ostream& operator<<(std::ostream& os, const State& s) {
+    for (int i = 0; i < s.length; ++i) {
+        os << s.state[i];
+    }
+    return os;
+}
+
 // Returns the indices which minimum length composite patterns start at and the minumum length
 // Also returns if the siteswap has a composite section starting from a finite state
-std::tuple<std::vector<int>, int, bool> getMinStarts(State state, int ss[], int period, bool incl_finite) {
+// Early exits if it's infinite but incl_infinite is false.
+std::tuple<std::vector<int>, int, bool> getMinStarts(
+        State state, int ss[], int period, bool incl_finite, bool incl_infinite) {
     std::unordered_map<StateRep, std::vector<int>> last_seen;
     last_seen[state.state].push_back(0);
     int min_diff = period;
@@ -45,6 +55,10 @@ std::tuple<std::vector<int>, int, bool> getMinStarts(State state, int ss[], int 
                 } else if (incl_finite && diff != period && diff != period*2) {
                     // has a composite subpattern with gcd(subperiod, period) > 1
                     is_finite = false;
+                    if (!incl_infinite) {
+                        // Early exit because it's an inf pattern and we don't want them
+                        return {mins, INVALID, false};
+                    }
                 }
                 if (diff < min_diff) {
                     min_diff = diff;
@@ -71,8 +85,12 @@ bool higher(int ss[], int a, int b, int period) {
 
 // subperiod should be the length of the repeating pattern at the start which
 // was used to generate this ss.
-std::pair<bool, bool> isCanonical(const State& state, int ss[], int period, int subperiod, bool incl_finite) {
-    const auto [mins, min_diff, is_finite] = getMinStarts(state, ss, period, incl_finite);
+std::pair<bool, bool> isCanonical(const State& state, int ss[], int period, int subperiod, bool incl_finite, bool incl_infinite) {
+    const auto [mins, min_diff, is_finite] = getMinStarts(state, ss, period, incl_finite, incl_infinite);
+    if (min_diff == INVALID) {
+        // We early exited as we knew early on that we didn't want this one.
+        return {false, false};
+    }
     assert(mins.size() > 0); // Should have no prime patterns
     if (min_diff != subperiod) {
         // There was a smaller repeating part
@@ -163,9 +181,9 @@ State getStateFromPartition(const std::vector<int>& partition) {
 int tmp[MAX_PERIOD];
 int state[MAX_HEIGHT];
 int tmp_ss[MAX_PERIOD];
-int c = 0;
+unsigned long long c = 0;
 unsigned long long count = 0;
-unsigned long long finite = 0;
+unsigned long long finite_count = 0;
 int main(int argc, char const *argv[]) {
     args::ArgumentParser parser("Count composite siteswaps.", "");
     args::HelpFlag help(parser, "help", "Display this help menu", {'h', "help"});
@@ -173,6 +191,7 @@ int main(int argc, char const *argv[]) {
     args::Positional<int> balls_flag(parser, "balls", "The number of balls to use", args::Options::Required);
     args::Positional<int> period_flag(parser, "period", "The period to use", args::Options::Required);
     args::Flag finite_flag(parser, "finite", "Include composites from finite states", {'f', "finite"});
+    args::Flag infinite_flag(parser, "infinite", "Include composites from infinite states", {'i', "infinite"});
     args::Flag verbose_flag(parser, "verbose", "Don't print updates", {'v', "verbose"});
     args::Flag zero_flag(parser, "zero", "Only count patterns with zeros", {'z', "zero"});
     args::Flag print_flag(parser, "print", "Print out all the siteswaps rather than just counting", {'p', "print"});
@@ -193,24 +212,24 @@ int main(int argc, char const *argv[]) {
 	int period = args::get(period_flag);
     assert(period < MAX_PERIOD);
     bool incl_finite = args::get(finite_flag);
+    bool incl_infinite = args::get(infinite_flag);
     bool verbose = args::get(verbose_flag);
     bool zero = args::get(zero_flag);
     bool print = args::get(print_flag);
     for (int subperiod = 1; subperiod <= period / 2; ++subperiod) {
         int gcd = std::gcd(period, subperiod);
-        if (gcd == 1 && !incl_finite) continue;
-        // std::cout << "period, subperiod, gcd: " << period << " " << subperiod << " " << gcd << "\n";
+        if ((gcd == 1 && !incl_finite) || (gcd != 1 && !incl_infinite)) continue;
+        if (verbose) {
+            std::cout << "period, subperiod: " << period << " " << subperiod << "\n";
+        }
         std::vector<int> tmp(subperiod, 0);
         forEachPartition(tmp, 0, balls, subperiod, [&](const std::vector<int>& partition) {
-            // std::cout << "partition, state: ";
-            // for (int i = 0; i < p; ++i)
-                // std::cout << part[i] << " ";
-            // std::cout << "\n";
             const auto state = getStateFromPartition(partition);
-            // for (int i = 0; i < state_len; ++i) {
-                // std::cout << state[i];
-            // }
-            // std::cout << "\n";
+            if (verbose) {
+                std::cout << "partition: ";
+                for (int p : partition) std::cout << p << " ";
+                std::cout << "state: " << state << "\n";
+            }
             if (!stateValidForPeriod(state, period-subperiod)) {
                 return;
             }
@@ -221,19 +240,16 @@ int main(int argc, char const *argv[]) {
                     left_has_0 = left_has_0 || (left[i] == 0);
                 }
                 forEachSiteswap(state, period-subperiod, [&](int *right, int right_period) {
-                    if (verbose && (c++ & 0x3FFFFF) == 0) {
-                        std::cout << "Examined " << c << " and found " << count << " composites so far" << std::endl;
-                    }
                     bool has_0 = left_has_0;
                     for (int i = 0; i < right_period; ++i) {
                         tmp_ss[i+left_period] = right[i];
                         has_0 = has_0 || (right[i] == 0);
                     }
                     if (zero && !has_0) return;
-                    const auto [is_canonical, is_finite] = isCanonical(state, tmp_ss, period, subperiod, incl_finite);
+                    const auto [is_canonical, is_finite] = isCanonical(state, tmp_ss, period, subperiod, incl_finite, incl_infinite);
                     if (is_canonical) {
                         if (is_finite) {
-                            ++finite;
+                            ++finite_count;
                         }
                         if (print) {
                             for (int i = 0; i < period; ++i) {
@@ -243,13 +259,20 @@ int main(int argc, char const *argv[]) {
                         }
                         ++count;
                     }
+                    if (verbose && (c++ & 0x3FFFFF) == 0) {
+                        std::cout << "Examined " << c << " and found " << count << " composites so far" << std::endl;
+                    }
                 });
             });
         });
     }
-    std::cout << count << "\n";
-    if (incl_finite) {
-        std::cout << count - finite << "\n";
-        std::cout << finite << "\n";
+    if (incl_infinite && incl_finite) {
+        std::cout << count << "\n";
+        std::cout << count - finite_count << "\n";
+        std::cout << finite_count << "\n";
+    } else if (incl_finite) {
+        std::cout << finite_count << "\n";
+    } else if (incl_infinite) {
+        std::cout << count - finite_count << "\n";
     }
 }
