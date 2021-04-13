@@ -230,6 +230,12 @@ int main(int argc, char const *argv[]) {
                 for (int p : partition) std::cout << p << " ";
                 std::cout << "state: " << state << "\n";
             }
+            if (partition[0] == 0 && balls > 0) {
+                // Siteswap must start with a 0 so cannot be canonical as there
+                // will be a non-zero somewhere, unless it's a zero ball
+                // pattern.
+                return;
+            }
             if (!stateValidForPeriod(state, period-subperiod)) {
                 return;
             }
